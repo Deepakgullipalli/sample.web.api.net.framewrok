@@ -126,6 +126,68 @@ namespace sample.web.api.net.framewrok.Controllers
             products.Add(duplicatedProduct);
             return CreatedAtRoute("DefaultApi", new { id = duplicatedProduct.Id }, duplicatedProduct);
         }
+        
+        using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Xml.Linq;
+using System.Xml.Serialization;
+
+        
+        private static string SerializeObjectToXml<T>(T obj)
+{
+    var serializer = new XmlSerializer(typeof(T));
+    using (var stringWriter = new StringWriter())
+    {
+        serializer.Serialize(stringWriter, obj);
+        return stringWriter.ToString();
+    }
+    
+    private static string ConvertXmlToSoapEnvelope(string xml, string soapNamespace, string operationName)
+{
+    // Create the SOAP Envelope
+    var envelope = new XElement(XName.Get("Envelope", soapNamespace),
+        new XAttribute(XNamespace.Xmlns + "soap", soapNamespace),
+        new XElement(XName.Get("Body", soapNamespace),
+            new XElement(XName.Get(operationName, soapNamespace), XElement.Parse(xml))
+        )
+    );
+
+    return envelope.ToString();
+}
+
+[HttpPost]
+public async Task<HttpResponseMessage> Post([FromBody] MyComplexClass myComplexObject)
+{
+    var soapEndpoint = "https://www.example.com/soap.asmx"; // Replace with the correct SOAP endpoint
+    var soapAction = "http://www.example.com/soap/YourOperationName"; // Replace with the correct SOAP action
+    var soapNamespace = "http://www.example.com/soap/";
+
+    var serializedXml = SerializeObjectToXml(myComplexObject);
+    var soapEnvelope = ConvertXmlToSoapEnvelope(serializedXml, soapNamespace, "YourOperationName");
+
+    using (var httpClient = new HttpClient())
+    {
+        httpClient.DefaultRequestHeaders.Clear();
+        httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/xml"));
+        httpClient.DefaultRequestHeaders.Add("SOAPAction", soapAction);
+
+        var content = new StringContent(soapEnvelope, Encoding.UTF8, "text/xml");
+
+        var response = await httpClient.PostAsync(soapEndpoint, content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return Request.CreateErrorResponse(response.StatusCode, response.ReasonPhrase);
+        }
+
+        var result = await response.Content.ReadAsStringAsync();
+        return Request.CreateResponse(HttpStatusCode.OK, result);
+    }
+}
+
+
+}
+
     }
 
 }
